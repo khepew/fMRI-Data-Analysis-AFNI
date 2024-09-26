@@ -1,0 +1,46 @@
+
+1. 3dSkullStrip  
+Command: 3dSkullStrip -input FT_anat+orig -prefix FT_anat_brain  
+Explanation: This command extracts the brain from surrounding tissues and the skull in the anatomical dataset. The input is FT_anat+orig, and the output, which is the brain-extracted dataset, is saved as FT_anat_brain+orig.
+
+2. 3dTstat  
+Command: 3dTstat -mean -prefix meanfunc1.nii.gz FT_run1.volreg+orig  
+Explanation: Computes voxel-wise statistics, such as the mean, across a 3D+time dataset. In this case, it calculates the mean of each voxel time series from the input dataset FT_run1.volreg+orig and stores the output in meanfunc1.nii.gz.
+
+3. 3dAutomask  
+Command: 3dAutomask -clfrac 0.4 -prefix clean_base.nii.gz meanfunc1.nii.gz  
+Explanation: Creates a brain mask from the input dataset meanfunc1.nii.gz, reducing the dataset size and improving analysis speed. The -clfrac option adjusts the clipping level fraction, controlling the size of the mask.
+
+4. align_epi_anat.py  
+Command:
+align_epi_anat.py -anat2epi -anat ../map2mni/anatSS.FT.nii -anat_has_skull no -suffix _al_junk -epi clean_base.nii.gz -epi_base 0 -epi_strip 3dAutomask -cost nmi -giant_move -check_flip -volreg off -tshift off
+Explanation: Aligns an anatomical dataset with an EPI dataset. This script computes the necessary transformations and applies them to align the two datasets, using normalized mutual information as the cost function.
+
+5. @SSwarper  
+Command:
+@SSwarper -input anat+orig -base MNI152_T1_2009c+tlrc -subid FT -odir ./map2mni
+Explanation: Skulls-strip the brain and calculates the transformation (warp) to align the anatomical dataset to a reference template, such as MNI152.
+
+6. cat_matvec  
+Command: cat_matvec FT_anat_brain.aff12.1D -I > func2mri_warp.1D  
+Explanation: Concatenates 3D transformation matrices. Here, it computes the inverse of the matrix stored in FT_anat_brain.aff12.1D and saves the result to func2mri_warp.1D.
+
+7. 3dAllineate  
+Command:
+3dAllineate -base meanfunc1.nii.gz -input FT_anat_brain+orig -1Dmatrix_apply func2mri_warp.1D -prefix FT_anat_aligned+orig
+Explanation: Aligns one dataset to another using an affine transformation. The matrix calculated previously (func2mri_warp.1D) is applied to the input dataset.
+
+8. 3dNwarpApply  
+Command:
+3dNwarpApply -nwarp 'anat.aff12.1D anatQQ.nii' -source FT_anat+orig -master MNI152_T1_2009c+tlrc -prefix FT_anat_warped+tlrc
+Explanation: Applies a nonlinear warp transformation to a 3D dataset. The warp includes both affine and nonlinear transformations, aligning the dataset to a master grid.
+
+9. 3dcalc  
+Command:
+3dcalc -a FT_run1.volref+orig -b meanfunc1.nii.gz -expr '(a-b)/(abs(b)+1)*astep(b,200)*100' -prefix FT_run1.scale+orig
+Explanation: Performs voxel-by-voxel arithmetic operations between two datasets. Here, it normalizes the FT_run1.volref+orig dataset using meanfunc1.nii.gz.
+
+10. 3dBandpass  
+Command:
+3dBandpass -input FT_run1.scale+orig -mask clean_base.nii.gz -blur 5 -band 0.01 0.1 -prefix FT_run1.scale.smooth+orig
+Explanation: Performs bandpass filtering and spatial smoothing on the input dataset within a specific mask. This reduces noise and focuses on signals within a defined frequency range.
